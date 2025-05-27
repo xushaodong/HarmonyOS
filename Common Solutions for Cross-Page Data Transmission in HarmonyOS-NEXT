@@ -1,0 +1,133 @@
+Solving Data Passing Issues in HarmonyOS App Development
+Problem Scenario
+In HarmonyOS app development, a common issue arises when passing complex object data from Page A to Page B using router.pushUrl(). The data is often lost or fails to parse, especially when dealing with custom class objects or large datasets.
+Root Cause Analysis
+
+Serialization Limitations: HarmonyOS page routing only supports basic data types and simple serializable objects.
+Data Size Restrictions: Data exceeding 100KB may be truncated during transfer.
+Lifecycle Differences: Data from the source page may be garbage-collected during navigation.
+
+Solution 1: Using a Global Data Bus
+// 1. Create a global data manager
+class DataBus {
+  private static instance: DataBus;
+  private dataMap: Map<string, Object> = new Map();
+
+  public static getInstance(): DataBus {
+    if (!DataBus.instance) {
+      DataBus.instance = new DataBus();
+    }
+    return DataBus.instance;
+  }
+
+  public setData(key: string, data: Object): void {
+    this.dataMap.set(key, data);
+  }
+
+  public getData(key: string): Object | undefined {
+    return this.dataMap.get(key);
+  }
+}
+
+// 2. Set data in Page A
+DataBus.getInstance().setData('userInfo', {
+  name: 'John Doe',
+  age: 28,
+  avatar: 'base64...'
+});
+
+// 3. Retrieve data in Page B
+let user = DataBus.getInstance().getData('userInfo');
+
+Solution 2: Using Persistent Storage
+// 1. Store data using Preferences
+import preferences from '@ohos.data.preferences';
+
+async function saveData(context) {
+  try {
+    let pref = await preferences.getPreferences(context, 'mydata');
+    await pref.put('complexObj', JSON.stringify(complexData));
+    await pref.flush();
+  } catch (e) {
+    console.error(`Save failed: ${e}`);
+  }
+}
+
+// 2. Retrieve data in the target page
+async function loadData(context) {
+  let pref = await preferences.getPreferences(context, 'mydata');
+  let dataStr = await pref.get('complexObj', 'default');
+  return JSON.parse(dataStr);
+}
+
+Solution 3: Optimizing Route Parameter Passing
+// 1. Convert complex object to string
+let params = {
+  id: 123,
+  data: encodeURIComponent(JSON.stringify(complexData))
+};
+
+// 2. Pass via URL
+router.pushUrl({
+  url: 'pages/PageB',
+  params: params
+});
+
+// 3. Parse in Page B
+onPageShow() {
+  let uri = router.getParams();
+  let complexData = JSON.parse(decodeURIComponent(uri.data));
+}
+
+Performance Comparison
+
+
+
+Solution
+Advantages
+Disadvantages
+Applicable Scenarios
+
+
+
+Global Data Bus
+Fast memory access
+Data lost on app restart
+Data sharing within a single session
+
+
+Persistent Storage
+Data persists
+IO operations introduce latency
+Data requiring persistence
+
+
+URL Parameter
+No additional storage needed
+Limited by size restrictions
+Simple data transfer
+
+
+Best Practice Recommendations
+
+For data smaller than 50KB, prioritize Solution 3 (URL Parameter).
+For frequently accessed intermediate data, use Solution 1 (Global Data Bus).
+For data requiring persistence, use Solution 2 (Preferences).
+For large datasets (>100KB), consider distributed data objects.
+
+Common Issue Troubleshooting
+
+Data Format Errors: Ensure all custom classes implement serialization interfaces.
+Memory Leaks: Clear data in the global data bus promptly.
+Encoding Issues: Ensure symmetric use of encode/decode for URL parameters.
+
+Further Considerations
+For cross-device data sharing, leverage HarmonyOS's distributed capabilities:
+// Create a distributed data object
+import distributedObject from '@ohos.data.distributedDataObject';
+let g_object = distributedObject.createDistributedObject({ data: null });
+
+// Set data
+g_object.data = complexData;
+g_object.setSessionId('default');
+
